@@ -1,0 +1,70 @@
+name: OpenFaaS CI/CD with Terraform
+
+on:
+  push:
+    branches: [ main ]
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose action"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - apply
+          - destroy
+
+jobs:
+
+  build:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker Login
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Build & Push Image
+        run: |
+          faas-cli build -f stack.yaml
+          faas-cli push -f stack.yaml
+
+  terraform:
+    needs: build
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        if: ${{ github.event.inputs.action == 'apply' || github.event_name == 'push' }}
+        working-directory: terraform
+        run: |
+          terraform apply -auto-approve \
+            -var="openfaas_uri=http://127.0.0.1:8080" \
+            -var="openfaas_user=admin" \
+            -var="openfaas_password=${{ secrets.OPENFAAS_PASSWORD }}" \
+            -var="image_tag=${{ secrets.DOCKER_USERNAME }}/hello-node:latest"
+
+      - name: Terraform Destroy
+        if: ${{ github.event.inputs.action == 'destroy' }}
+        working-directory: terraform
+        run: |
+          terraform destroy -auto-approve \
+            -var="openfaas_uri=http://127.0.0.1:8080" \
+            -var="openfaas_user=admin" \
+            -var="openfaas_password=${{ secrets.OPENFAAS_PASSWORD }}" \
+            -var="image_tag=${{ secrets.DOCKER_USERNAME }}/hello-node:latest"
+
+
