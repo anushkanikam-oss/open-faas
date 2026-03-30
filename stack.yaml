@@ -4,6 +4,6 @@ provider:
 
 functions:
   hello-node:
-    lang: node14
+    lang: node8
     handler: ./hello-node
     image: anushkanikam/hello-node:latest
